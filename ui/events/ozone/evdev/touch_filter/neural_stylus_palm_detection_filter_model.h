@@ -77,6 +77,8 @@ struct COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilterModelConfig {
   // R = 0.5 * r^3 + 1.3 * r^2 - 0.2 * r + 1
   std::vector<float> radius_polynomial_resize;
 
+  float output_threshold = 0.0f;
+
   // True if the touch data should be resampled. Enable this if your device
   // has a non-120 Hz touchscreen. Since the model is hardcoded to assume 8 ms
   // between samples, non-120Hz touchscreens will not work correctly without
