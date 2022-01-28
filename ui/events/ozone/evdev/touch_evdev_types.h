@@ -5,6 +5,9 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_TOUCH_EVDEV_TYPES_H_
 #define UI_EVENTS_OZONE_EVDEV_TOUCH_EVDEV_TYPES_H_
 
+#if defined(__ANDROID__)
+#include <compare>
+#endif
 #include <stddef.h>
 
 #include "base/component_export.h"
@@ -21,6 +24,10 @@ struct COMPONENT_EXPORT(EVDEV) InProgressTouchEvdev {
   InProgressTouchEvdev();
   InProgressTouchEvdev(const InProgressTouchEvdev& other);
   ~InProgressTouchEvdev();
+
+#if defined(__ANDROID__)
+  auto operator<=>(const InProgressTouchEvdev&) const = default;
+#endif
 
   // Current touch major of this slot.
   int major = 0;

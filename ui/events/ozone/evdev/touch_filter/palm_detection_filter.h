@@ -5,6 +5,10 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_TOUCH_FILTER_PALM_DETECTION_FILTER_H_
 #define UI_EVENTS_OZONE_EVDEV_TOUCH_FILTER_PALM_DETECTION_FILTER_H_
 
+#if defined(__ANDROID__)
+#include "chrome_to_android_compatibility.h"
+#endif
+
 #include <bitset>
 #include <vector>
 

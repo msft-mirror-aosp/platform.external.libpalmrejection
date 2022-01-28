@@ -11,7 +11,11 @@
 #include "base/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#if !defined(__ANDROID__)
 #include "ui/events/ozone/evdev/event_device_test_util.h"
+#else
+#include "chrome_to_android_compatibility_test_support.h"
+#endif
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.h"
@@ -47,10 +51,24 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
     EXPECT_CALL(*model_, config())
         .Times(testing::AnyNumber())
         .WillRepeatedly(testing::ReturnRef(model_config_));
+#if !defined(__ANDROID__)
     EXPECT_TRUE(
         CapabilitiesToDeviceInfo(kNocturneTouchScreen, &nocturne_touchscreen_));
     palm_detection_filter_ = std::make_unique<NeuralStylusPalmDetectionFilter>(
         nocturne_touchscreen_,
+#else
+    PalmFilterDeviceInfo nocturne_info{
+        .max_x = 10404,
+        .max_y = 6936,
+        .x_res = 40,
+        .y_res = 40,
+        .major_radius_res = 1,
+        .minor_radius_res = 1,
+        .minor_radius_supported = true,
+    };
+    palm_detection_filter_ = std::make_unique<NeuralStylusPalmDetectionFilter>(
+        nocturne_info,
+#endif
         std::unique_ptr<NeuralStylusPalmDetectionFilterModel>(model_),
         shared_palm_state.get());
     touch_.resize(kNumTouchEvdevSlots);
@@ -62,7 +80,9 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
  protected:
   std::vector<InProgressTouchEvdev> touch_;
   std::unique_ptr<SharedPalmDetectionFilterState> shared_palm_state;
+#if !defined(__ANDROID__)
   EventDeviceInfo nocturne_touchscreen_;
+#endif
   // Owned by the filter.
   MockNeuralModel* model_;
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
@@ -72,6 +92,7 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
 class NeuralStylusPalmDetectionFilterDeathTest
     : public NeuralStylusPalmDetectionFilterTest {};
 
+#if !defined(__ANDROID__)
 TEST_F(NeuralStylusPalmDetectionFilterTest, EventDeviceSimpleTest) {
   EventDeviceInfo devinfo;
   std::vector<std::pair<DeviceCapabilities, bool>> devices = {
@@ -112,6 +133,7 @@ TEST_F(NeuralStylusPalmDetectionFilterDeathTest, EventDeviceConstructionDeath) {
         shared_palm_state.get());
   });
 }
+#endif
 
 TEST_F(NeuralStylusPalmDetectionFilterTest, NameTest) {
   EXPECT_EQ("NeuralStylusPalmDetectionFilter",

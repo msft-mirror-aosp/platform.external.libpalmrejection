@@ -9,8 +9,14 @@
 #include <deque>
 #include <vector>
 
+#if defined(__ANDROID__)
+#undef LOG_INFO
+#undef LOG_WARNING
+#endif
 #include "base/time/time.h"
+#if !defined(__ANDROID__)
 #include "ui/events/ozone/evdev/event_device_info.h"
+#endif
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -25,10 +31,15 @@ struct COMPONENT_EXPORT(EVDEV) PalmFilterDeviceInfo {
   float major_radius_res = 1.f;
   float minor_radius_res = 1.f;
   bool minor_radius_supported = false;
+#if defined(__ANDROID__)
+  auto operator<=>(const PalmFilterDeviceInfo&) const = default;
+#endif
 };
 
+#if !defined(__ANDROID__)
 COMPONENT_EXPORT(EVDEV)
 PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(const EventDeviceInfo& devinfo);
+#endif
 
 // Data for a single touch event.
 struct COMPONENT_EXPORT(EVDEV) PalmFilterSample {
