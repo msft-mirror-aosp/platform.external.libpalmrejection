@@ -6,6 +6,7 @@ core.workflow(
     ),
     origin_files = glob(
         [
+            ".clang-format",
             "ui/events/event_constants.h",
             "ui/events/ozone/evdev/touch_evdev_types.cc",
             "ui/events/ozone/evdev/touch_evdev_types.h",
@@ -41,6 +42,7 @@ core.workflow(
     ),
     destination_files = glob(
         [
+            ".clang-format",
             "ui/events/event_constants.h",
             "ui/events/ozone/evdev/touch_evdev_types.cc",
             "ui/events/ozone/evdev/touch_evdev_types.h",
@@ -67,10 +69,16 @@ core.workflow(
             "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.h",
         ],
         exclude = [
+            "**/Android.bp",
             "LICENSE",
             "METADATA",
             "MODULE_LICENSE_BSD",
             "OWNERS",
+            "PREUPLOAD.cfg",
+            "TEST_MAPPING",
+            "chrome_to_android_compatibility.h",
+            "chrome_to_android_compatibility_test_support.cc",
+            "chrome_to_android_compatibility_test_support.h",
             "copy.bara.sky",
         ],
     ),

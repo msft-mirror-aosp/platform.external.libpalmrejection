@@ -10,12 +10,78 @@
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#if defined(__ANDROID__)
+#include <linux/input-event-codes.h>
+#include "chrome_to_android_compatibility_test_support.h"
+#else
 #include "ui/events/ozone/evdev/event_device_test_util.h"
+#endif
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.h"
 
 namespace ui {
+
+#if defined(__ANDROID__)
+/**
+ * The tests that require an actual device (something that responds to ioctls)
+ * have been removed. The rest of the tests were simplified by modifying the
+ * 'CreatePalmFilterDeviceInfo' method.
+ */
+enum DeviceType {
+  kNocturneTouchScreen,
+  kLinkTouchscreen,
+  kKohakuTouchscreen,
+};
+
+static PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(DeviceType deviceType) {
+  // Default value for resolution is 1 if it's not specified (or set to 0). See
+  // https://source.chromium.org/chromium/chromium/src/+/main:ui/events/ozone/evdev/touch_filter/
+  // neural_stylus_palm_detection_filter_util.cc;l=11;drc=7f74e1d22e2d0b91856ea6b3619098cd05ef6158
+
+  switch (deviceType) {
+    case kNocturneTouchScreen:
+      return PalmFilterDeviceInfo{
+          .max_x = 10404,
+          .max_y = 6936,
+          .x_res = 40,
+          .y_res = 40,
+          .major_radius_res = 1,
+          .minor_radius_res = 1,
+          .minor_radius_supported = true,
+      };
+    case kLinkTouchscreen:
+      return PalmFilterDeviceInfo{
+          .max_x = 2559,
+          .max_y = 1699,
+          .x_res = 20,
+          .y_res = 20,
+          .major_radius_res = 1,
+          .minor_radius_res = 1,
+          .minor_radius_supported = false,
+      };
+    case kKohakuTouchscreen:
+      return PalmFilterDeviceInfo{
+          .max_x = 2559,
+          .max_y = 1699,
+          .x_res = 1,
+          .y_res = 1,
+          .major_radius_res = 1,
+          .minor_radius_res = 1,
+          .minor_radius_supported = false,
+      };
+  }
+}
+
+class EventDeviceInfo {
+ public:
+  float GetAbsResolution(int /*axis*/) { return 20; }
+};
+
+bool CapabilitiesToDeviceInfo(DeviceType, EventDeviceInfo*) {
+  return true;
+}
+#endif
 
 class NeuralStylusPalmDetectionFilterUtilTest : public testing::Test {
  public:
@@ -43,6 +109,7 @@ class NeuralStylusPalmDetectionFilterUtilTest : public testing::Test {
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
 };
 
+#if !defined(__ANDROID__)
 TEST_F(NeuralStylusPalmDetectionFilterUtilTest, DistilledNocturneTest) {
   const PalmFilterDeviceInfo nocturne_distilled =
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
@@ -72,13 +139,18 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, NoMinorResTest) {
   EXPECT_EQ(1, nocturne_distilled.minor_radius_res);
   EXPECT_EQ(1, nocturne_distilled.major_radius_res);
 }
+#endif
 
 TEST_F(NeuralStylusPalmDetectionFilterUtilTest, DistillerKohakuTest) {
   EventDeviceInfo kohaku_touchscreen;
   ASSERT_TRUE(
       CapabilitiesToDeviceInfo(kKohakuTouchscreen, &kohaku_touchscreen));
   const PalmFilterDeviceInfo kohaku_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(kohaku_touchscreen);
+#else
+      CreatePalmFilterDeviceInfo(kKohakuTouchscreen);
+#endif
   EXPECT_FALSE(kohaku_distilled.minor_radius_supported);
   EXPECT_EQ(1, kohaku_distilled.x_res);
   EXPECT_EQ(1, kohaku_distilled.y_res);
@@ -88,7 +160,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, DistilledLinkTest) {
   EventDeviceInfo link_touchscreen;
   ASSERT_TRUE(CapabilitiesToDeviceInfo(kLinkTouchscreen, &link_touchscreen));
   const PalmFilterDeviceInfo link_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(link_touchscreen);
+#else
+      CreatePalmFilterDeviceInfo(kLinkTouchscreen);
+#endif
   EXPECT_FALSE(link_distilled.minor_radius_supported);
   EXPECT_FLOAT_EQ(1.f, link_distilled.major_radius_res);
   EXPECT_FLOAT_EQ(link_distilled.major_radius_res,
@@ -98,7 +174,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, DistilledLinkTest) {
 TEST_F(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterSampleTest) {
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
+#else
+      CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
+#endif
   const PalmFilterSample sample =
       CreatePalmFilterSample(touch_, time, model_config_, nocturne_distilled);
   EXPECT_EQ(time, sample.time);
@@ -115,7 +195,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, LinkTouchscreenSampleTest) {
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   ASSERT_TRUE(CapabilitiesToDeviceInfo(kLinkTouchscreen, &link_touchscreen));
   const PalmFilterDeviceInfo link_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(link_touchscreen);
+#else
+      CreatePalmFilterDeviceInfo(kLinkTouchscreen);
+#endif
   touch_.minor = 0;  // no minor from link.
   // use 40 as a base since model is trained on that kind of device.
   model_config_.radius_polynomial_resize = {
@@ -134,7 +218,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterStrokeTest) {
 
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
+#else
+      CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
+#endif
   // Deliberately long test to ensure floating point continued accuracy.
   for (int i = 0; i < 500000; ++i) {
     touch_.x = 15 + i;
@@ -172,7 +260,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest,
 
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
+#else
+      CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
+#endif
   for (int i = 0; i < 500; ++i) {
     touch_.major = 2 + i;
     touch_.minor = 1 + i;
@@ -196,7 +288,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, StrokeGetMaxMajorTest) {
   EXPECT_FLOAT_EQ(0, stroke.MaxMajorRadius());
   base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
+#else
+      CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
+#endif
   for (int i = 1; i < 50; ++i) {
     touch_.major = i;
     touch_.minor = i - 1;
@@ -214,7 +310,11 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest, SampleRadiusConversion) {
   model_config_.radius_polynomial_resize = {71.3};
   base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
+#if !defined(__ANDROID__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
+#else
+      CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
+#endif
   PalmFilterSample sample =
       CreatePalmFilterSample(touch_, time, model_config_, nocturne_distilled);
   EXPECT_FLOAT_EQ(71.3, sample.major_radius);

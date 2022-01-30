@@ -8,6 +8,7 @@
 
 namespace ui {
 
+#if !defined(__ANDROID__)
 PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(
     const EventDeviceInfo& devinfo) {
   PalmFilterDeviceInfo info;
@@ -42,6 +43,7 @@ PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(
 
   return info;
 }
+#endif
 
 namespace {
 float ScaledRadius(
