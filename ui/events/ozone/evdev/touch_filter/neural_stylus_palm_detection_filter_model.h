@@ -5,6 +5,10 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_TOUCH_FILTER_NEURAL_STYLUS_PALM_DETECTION_FILTER_MODEL_H_
 #define UI_EVENTS_OZONE_EVDEV_TOUCH_FILTER_NEURAL_STYLUS_PALM_DETECTION_FILTER_MODEL_H_
 
+#if defined(__ANDROID__)
+#include "chrome_to_android_compatibility.h"
+#endif
+
 #include <cstdint>
 #include <vector>
 
