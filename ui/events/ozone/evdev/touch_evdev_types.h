@@ -5,7 +5,7 @@
 #ifndef UI_EVENTS_OZONE_EVDEV_TOUCH_EVDEV_TYPES_H_
 #define UI_EVENTS_OZONE_EVDEV_TOUCH_EVDEV_TYPES_H_
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 #include <compare>
 #endif
 #include <stddef.h>
@@ -25,7 +25,7 @@ struct COMPONENT_EXPORT(EVDEV) InProgressTouchEvdev {
   InProgressTouchEvdev(const InProgressTouchEvdev& other);
   ~InProgressTouchEvdev();
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
   auto operator<=>(const InProgressTouchEvdev&) const = default;
 #endif
 
