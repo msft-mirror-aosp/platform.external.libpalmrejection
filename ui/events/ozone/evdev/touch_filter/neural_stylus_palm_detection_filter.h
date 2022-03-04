@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "base/time/time.h"
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_info.h"
 #endif
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
@@ -35,7 +35,7 @@ class COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilter
  public:
   // Takes ownership of the model.
   NeuralStylusPalmDetectionFilter(
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       const EventDeviceInfo& devinfo,
 #else
       PalmFilterDeviceInfo palm_filter_device_info,
@@ -53,7 +53,7 @@ class COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilter
               base::TimeTicks time,
               std::bitset<kNumTouchEvdevSlots>* slots_to_hold,
               std::bitset<kNumTouchEvdevSlots>* slots_to_suppress) override;
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
   static bool CompatibleWithNeuralStylusPalmDetectionFilter(
       const EventDeviceInfo& devinfo);
 

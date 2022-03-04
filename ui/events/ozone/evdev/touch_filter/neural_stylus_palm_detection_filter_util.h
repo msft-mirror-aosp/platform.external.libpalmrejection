@@ -9,12 +9,12 @@
 #include <deque>
 #include <vector>
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 #undef LOG_INFO
 #undef LOG_WARNING
 #endif
 #include "base/time/time.h"
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_info.h"
 #endif
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
@@ -31,12 +31,12 @@ struct COMPONENT_EXPORT(EVDEV) PalmFilterDeviceInfo {
   float major_radius_res = 1.f;
   float minor_radius_res = 1.f;
   bool minor_radius_supported = false;
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
   auto operator<=>(const PalmFilterDeviceInfo&) const = default;
 #endif
 };
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 COMPONENT_EXPORT(EVDEV)
 PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(const EventDeviceInfo& devinfo);
 #endif
