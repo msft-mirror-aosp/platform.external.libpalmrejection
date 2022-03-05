@@ -18,12 +18,12 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/values.h"
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_info.h"
 #endif
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/features.h"
 #else
 #include <linux/input-event-codes.h>
@@ -39,7 +39,7 @@ float EuclideanDistance(const gfx::PointF& a, const gfx::PointF& b) {
 }  // namespace
 
 NeuralStylusPalmDetectionFilter::NeuralStylusPalmDetectionFilter(
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
     const EventDeviceInfo& devinfo,
 #else
     PalmFilterDeviceInfo palm_filter_device_info,
@@ -48,13 +48,13 @@ NeuralStylusPalmDetectionFilter::NeuralStylusPalmDetectionFilter(
     SharedPalmDetectionFilterState* shared_palm_state)
     : PalmDetectionFilter(shared_palm_state),
       tracking_ids_count_within_session_(0),
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       palm_filter_dev_info_(CreatePalmFilterDeviceInfo(devinfo)),
 #else
       palm_filter_dev_info_(palm_filter_device_info),
 #endif
       model_(std::move(palm_model)) {
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
   DCHECK(CompatibleWithNeuralStylusPalmDetectionFilter(devinfo))
       << "One should run compatible check before instantiation.";
 #endif
@@ -423,7 +423,7 @@ std::string NeuralStylusPalmDetectionFilter::FilterNameForTesting() const {
   return kFilterName;
 }
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 bool NeuralStylusPalmDetectionFilter::
     CompatibleWithNeuralStylusPalmDetectionFilter(
         const EventDeviceInfo& devinfo) {

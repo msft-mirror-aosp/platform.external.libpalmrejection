@@ -47,6 +47,17 @@ cc_library_static {
     sanitize: {
         misc_undefined: ["bounds"],
     },
+    host_supported: true,
+    target: {
+        host: {
+            include_dirs: [
+                "bionic/libc/kernel/uapi",
+            ],
+            cflags: [
+                "-D__ANDROID_HOST__",
+            ],
+        },
+    },
 }
 
 cc_test {
@@ -60,7 +71,6 @@ cc_test {
         "libbase",
         "libchrome",
     ],
-
     static_libs: [
         "libc++fs",
         "libgmock",
@@ -79,6 +89,20 @@ cc_test {
     ],
     sanitize: {
         misc_undefined: ["bounds"],
+    },
+    host_supported: true,
+    target: {
+        host: {
+            include_dirs: [
+                "bionic/libc/kernel/uapi",
+            ],
+            cflags: [
+                "-D__ANDROID_HOST__",
+            ],
+        },
+    },
+    test_options: {
+        unit_test: true,
     },
     test_suites: ["device-tests"],
 }
