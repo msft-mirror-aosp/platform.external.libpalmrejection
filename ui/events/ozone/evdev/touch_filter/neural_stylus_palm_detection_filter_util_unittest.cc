@@ -283,6 +283,24 @@ TEST_F(NeuralStylusPalmDetectionFilterUtilTest,
   }
 }
 
+TEST_F(NeuralStylusPalmDetectionFilterUtilTest, UnscaledMajorMinorResolution) {
+  model_config_.radius_polynomial_resize = {};
+  PalmFilterDeviceInfo device_info;
+  device_info.x_res = 2;
+  device_info.y_res = 5;
+  device_info.major_radius_res = 2;
+  device_info.minor_radius_res = 5;
+  device_info.minor_radius_supported = true;
+  touch_.major = 20;
+  touch_.minor = 10;
+  touch_.orientation = 0;
+  base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
+  PalmFilterSample sample =
+      CreatePalmFilterSample(touch_, time, model_config_, device_info);
+  EXPECT_EQ(20 / 2, sample.major_radius);
+  EXPECT_EQ(10 / 5, sample.minor_radius);
+}
+
 TEST_F(NeuralStylusPalmDetectionFilterUtilTest, StrokeGetMaxMajorTest) {
   PalmFilterStroke stroke(3);
   EXPECT_FLOAT_EQ(0, stroke.MaxMajorRadius());
