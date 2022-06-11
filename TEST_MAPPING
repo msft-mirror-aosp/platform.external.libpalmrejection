@@ -4,7 +4,7 @@
       "name": "inputflinger_tests"
     },
     {
-      "name": "libpalmrejector_test"
+      "name": "libpalmrejection_test"
     }
   ]
 }
