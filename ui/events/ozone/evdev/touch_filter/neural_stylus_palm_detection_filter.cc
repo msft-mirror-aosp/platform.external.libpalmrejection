@@ -20,14 +20,12 @@
 #include "base/values.h"
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_info.h"
-#endif
-#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
-#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
-#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
-#include "ui/events/ozone/features.h"
 #else
 #include <linux/input-event-codes.h>
 #endif
+#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
+#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
+#include "ui/events/ozone/features.h"
 
 namespace ui {
 namespace {
@@ -64,7 +62,7 @@ NeuralStylusPalmDetectionFilter::~NeuralStylusPalmDetectionFilter() {}
 
 void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
     int neighbor_count,
-    unsigned long min_sample_count,
+    unsigned long neighbor_min_sample_count,
     float max_distance,
     const PalmFilterStroke& stroke,
     std::vector<std::pair<float, int>>* biggest_strokes) const {
@@ -78,7 +76,7 @@ void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
     if (neighbor.tracking_id() == stroke.tracking_id()) {
       continue;
     }
-    if (neighbor.samples().size() < min_sample_count) {
+    if (neighbor.samples().size() < neighbor_min_sample_count) {
       continue;
     }
     float distance =
@@ -100,6 +98,7 @@ void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
 
 void NeuralStylusPalmDetectionFilter::FindNearestNeighborsWithin(
     int neighbor_count,
+    unsigned long neighbor_min_sample_count,
     float max_distance,
     const PalmFilterStroke& stroke,
     std::vector<std::pair<float, int>>* nearest_strokes) const {
@@ -117,7 +116,7 @@ void NeuralStylusPalmDetectionFilter::FindNearestNeighborsWithin(
     if (neighbor.tracking_id() == stroke.tracking_id()) {
       continue;
     }
-    if (neighbor.samples().size() < model_->config().min_sample_count) {
+    if (neighbor.samples().size() < neighbor_min_sample_count) {
       continue;
     }
     float distance =
@@ -209,15 +208,31 @@ void NeuralStylusPalmDetectionFilter::Filter(
     stroke.ProcessSample(CreatePalmFilterSample(touch, time, model_->config(),
                                                 palm_filter_dev_info_));
     if (!is_palm_.test(slot) && ShouldDecideStroke(stroke)) {
+      // slots_to_decide will have is_delay_ set to false anyway, no need to do
+      // the delay detection.
       slots_to_decide.insert(slot);
+      continue;
     }
 
+    // Heuristic delay detection.
     if (config.heuristic_delay_start_if_palm && !end_of_stroke &&
         stroke.samples_seen() < config.max_sample_count &&
         IsHeuristicPalmStroke(stroke)) {
       //  A stroke that we _think_ may be a palm, but is too short to decide
       //  yet. So we mark for delay for now.
       is_delay_.set(slot, true);
+    }
+
+    // Early stage delay detection that marks suspicious palms for delay.
+    if (!is_delay_.test(slot) && config.nn_delay_start_if_palm &&
+        config.early_stage_sample_counts.find(stroke.samples_seen()) !=
+            config.early_stage_sample_counts.end()) {
+      VLOG(1) << "About to run a early_stage prediction.";
+      if (DetectSpuriousStroke(ExtractFeatures(tracking_id), tracking_id,
+                               model_->config().output_threshold)) {
+        VLOG(1) << "hold detected.";
+        is_delay_.set(slot, true);
+      }
     }
   }
 
@@ -236,8 +251,9 @@ void NeuralStylusPalmDetectionFilter::Filter(
       is_palm_.set(slot, IsHeuristicPalmStroke(stroke));
       continue;
     }
-    is_palm_.set(slot, DetectSpuriousStroke(ExtractFeatures(tracking_id),
-                                            tracking_id, 0.0));
+    is_palm_.set(slot,
+                 DetectSpuriousStroke(ExtractFeatures(tracking_id), tracking_id,
+                                      model_->config().output_threshold));
     if (is_palm_.test(slot)) {
       shared_palm_state_->latest_palm_touch_time = time;
     }
@@ -288,9 +304,9 @@ bool NeuralStylusPalmDetectionFilter::IsHeuristicPalmStroke(
       return true;
     }
     std::vector<std::pair<float, int>> biggest_strokes;
-    FindBiggestNeighborsWithin(1 /* neighbors */, 1 /* min sample count */,
-                               model_->config().max_neighbor_distance_in_mm,
-                               stroke, &biggest_strokes);
+    FindBiggestNeighborsWithin(
+        1 /* neighbors */, 1 /* neighbor min sample count */,
+        model_->config().max_neighbor_distance_in_mm, stroke, &biggest_strokes);
     if (!biggest_strokes.empty() &&
         strokes_.find(biggest_strokes[0].second)->second.BiggestSize() >=
             config.heuristic_palm_area_limit) {
@@ -325,12 +341,11 @@ std::vector<float> NeuralStylusPalmDetectionFilter::ExtractFeatures(
   const int features_per_stroke = features.size();
   std::vector<std::pair<float, int>> nearest_strokes, biggest_strokes;
   const NeuralStylusPalmDetectionFilterModelConfig& config = model_->config();
-  FindNearestNeighborsWithin(config.nearest_neighbor_count,
-                             config.max_neighbor_distance_in_mm, stroke,
-                             &nearest_strokes);
+  FindNearestNeighborsWithin(
+      config.nearest_neighbor_count, config.neighbor_min_sample_count,
+      config.max_neighbor_distance_in_mm, stroke, &nearest_strokes);
   FindBiggestNeighborsWithin(
-      config.biggest_near_neighbor_count,
-      model_->config().min_sample_count /* min sample count */,
+      config.biggest_near_neighbor_count, config.neighbor_min_sample_count,
       config.max_neighbor_distance_in_mm, stroke, &biggest_strokes);
   for (uint32_t i = 0; i < config.nearest_neighbor_count; ++i) {
     if (i < nearest_strokes.size()) {
@@ -457,8 +472,8 @@ bool NeuralStylusPalmDetectionFilter::
     return false;
   }
 
-  // Optionally, we use touch_minor if it's around, so check it's good if it is
-  // present.
+  // Optionally, we use touch_minor if it's around, so check it's good if it
+  // is present.
   if (devinfo.HasAbsEvent(ABS_MT_TOUCH_MINOR) &&
       !code_check(ABS_MT_TOUCH_MINOR)) {
     return false;
