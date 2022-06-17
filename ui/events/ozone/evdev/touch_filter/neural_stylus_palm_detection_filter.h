@@ -27,6 +27,10 @@
 
 namespace ui {
 
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
+const base::TimeDelta kResamplePeriod = base::Milliseconds(8);
+#endif
+
 // An implementation of PalmDetectionFilter that relies on a DNN implementation
 // to decide on palm detection. Requires a configured model as an argument.
 // Heuristics are added for handling short strokes
@@ -82,7 +86,6 @@ class COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilter
       std::vector<std::pair<float, int>>* biggest_strokes) const;
 
   bool DetectSpuriousStroke(const std::vector<float>& features,
-                            int tracking_id,
                             float threshold) const;
   // Extracts the feature vector for the specified stroke.
   std::vector<float> ExtractFeatures(int tracking_id) const;
