@@ -37,6 +37,8 @@ struct COMPONENT_EXPORT(EVDEV) PalmFilterDeviceInfo {
 #endif
 };
 
+std::ostream& operator<<(std::ostream& out, const PalmFilterDeviceInfo& info);
+
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 COMPONENT_EXPORT(EVDEV)
 PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(const EventDeviceInfo& devinfo);
@@ -59,6 +61,8 @@ struct COMPONENT_EXPORT(EVDEV) PalmFilterSample {
            point == other.point && time == other.time;
   }
 };
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterSample& sample);
 
 COMPONENT_EXPORT(EVDEV)
 PalmFilterSample CreatePalmFilterSample(
@@ -117,7 +121,19 @@ class COMPONENT_EXPORT(EVDEV) PalmFilterStroke {
   // Used in part of the kahan summation.
   gfx::Vector2dF unscaled_centroid_sum_error_ =
       gfx::PointF(0., 0.).OffsetFromOrigin();
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const PalmFilterStroke& stroke);
 };
+
+template <typename T>
+std::ostream& operator<<(std::ostream& out, const std::deque<T>& queue) {
+  for (const auto& entry : queue) {
+    out << entry << "\n";
+  }
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterStroke& filter);
 
 }  // namespace ui
 

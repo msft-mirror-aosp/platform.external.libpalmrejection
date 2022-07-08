@@ -531,4 +531,46 @@ void NeuralStylusPalmDetectionFilter::EraseOldStrokes(base::TimeTicks time) {
   }
   previous_report_time_ = time;
 }
+
+static std::string addLinePrefix(std::string str, const std::string& prefix) {
+  std::stringstream ss;
+  bool newLineStarted = true;
+  for (const auto& ch : str) {
+    if (newLineStarted) {
+      ss << prefix;
+      newLineStarted = false;
+    }
+    if (ch == '\n') {
+      newLineStarted = true;
+    }
+    ss << ch;
+  }
+  return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const NeuralStylusPalmDetectionFilter& filter) {
+  out << "NeuralStylusPalmDetectionFilter(\n";
+  out << "  is_palm_ = " << filter.is_palm_ << "\n";
+  out << "  is_delay_ = " << filter.is_delay_ << "\n";
+  out << "  strokes_ =\n";
+  std::stringstream strokes;
+  strokes << filter.strokes_;
+  out << addLinePrefix(strokes.str(), "    ") << "\n";
+  out << "  previous_report_time_ = " << filter.previous_report_time_ << "\n";
+  out << "  active_tracking_ids_ = " << filter.active_tracking_ids_ << "\n";
+  out << "  tracking_ids_count_within_session_ = "
+      << filter.tracking_ids_count_within_session_ << "\n";
+  out << "  tracking_ids = [";
+  for (int i = 0; i < kNumTouchEvdevSlots; i++) {
+    out << filter.tracking_ids_[i] << ", ";
+  }
+  out << "]\n";
+
+  out << "  palm_filter_dev_info_ = " << filter.palm_filter_dev_info_ << "\n";
+  out << ")\n";
+
+  return out;
+}
+
 }  // namespace ui
