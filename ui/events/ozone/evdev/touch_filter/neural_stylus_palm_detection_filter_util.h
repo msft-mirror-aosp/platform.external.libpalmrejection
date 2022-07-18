@@ -12,6 +12,7 @@
 #if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 #undef LOG_INFO
 #undef LOG_WARNING
+#include <chrome_to_android_compatibility_test_support.h>
 #endif
 #include "base/time/time.h"
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
@@ -50,6 +51,13 @@ struct COMPONENT_EXPORT(EVDEV) PalmFilterSample {
   int tracking_id = 0;
   gfx::PointF point;
   base::TimeTicks time;
+
+  bool operator==(const PalmFilterSample& other) const {
+    return major_radius == other.major_radius &&
+           minor_radius == other.minor_radius && pressure == other.pressure &&
+           edge == other.edge && tracking_id == other.tracking_id &&
+           point == other.point && time == other.time;
+  }
 };
 
 COMPONENT_EXPORT(EVDEV)
@@ -65,6 +73,7 @@ class COMPONENT_EXPORT(EVDEV) PalmFilterStroke {
       const NeuralStylusPalmDetectionFilterModelConfig& model_config);
   PalmFilterStroke(const PalmFilterStroke& other);
   PalmFilterStroke(PalmFilterStroke&& other);
+  ~PalmFilterStroke();
 
   void ProcessSample(const PalmFilterSample& sample);
   gfx::PointF GetCentroid() const;
@@ -100,7 +109,10 @@ class COMPONENT_EXPORT(EVDEV) PalmFilterStroke {
    * to compute the resampled value.
    */
   PalmFilterSample last_sample_;
-  const NeuralStylusPalmDetectionFilterModelConfig& model_config_;
+
+  const uint64_t max_sample_count_;
+  const base::Optional<base::TimeDelta> resample_period_;
+
   gfx::PointF unscaled_centroid_ = gfx::PointF(0., 0.);
   // Used in part of the kahan summation.
   gfx::Vector2dF unscaled_centroid_sum_error_ =
