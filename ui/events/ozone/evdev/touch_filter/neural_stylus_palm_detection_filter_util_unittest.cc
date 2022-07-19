@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 #include <linux/input-event-codes.h>
 #include "chrome_to_android_compatibility_test_support.h"
 #else
@@ -22,7 +22,7 @@
 
 namespace ui {
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 /**
  * The tests that require an actual device (something that responds to ioctls)
  * have been removed. The rest of the tests were simplified by modifying the
@@ -157,7 +157,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, DistillerKohakuTest) {
   ASSERT_TRUE(
       CapabilitiesToDeviceInfo(kKohakuTouchscreen, &kohaku_touchscreen));
   const PalmFilterDeviceInfo kohaku_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(kohaku_touchscreen);
 #else
       CreatePalmFilterDeviceInfo(kKohakuTouchscreen);
@@ -171,7 +171,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, DistilledLinkTest) {
   EventDeviceInfo link_touchscreen;
   ASSERT_TRUE(CapabilitiesToDeviceInfo(kLinkTouchscreen, &link_touchscreen));
   const PalmFilterDeviceInfo link_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(link_touchscreen);
 #else
       CreatePalmFilterDeviceInfo(kLinkTouchscreen);
@@ -185,7 +185,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, DistilledLinkTest) {
 TEST_P(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterSampleTest) {
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
 #else
       CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
@@ -206,7 +206,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, LinkTouchscreenSampleTest) {
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   ASSERT_TRUE(CapabilitiesToDeviceInfo(kLinkTouchscreen, &link_touchscreen));
   const PalmFilterDeviceInfo link_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(link_touchscreen);
 #else
       CreatePalmFilterDeviceInfo(kLinkTouchscreen);
@@ -229,7 +229,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterStrokeTest) {
 
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
 #else
       CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
@@ -272,7 +272,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest,
 
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
 #else
       CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
@@ -319,7 +319,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, StrokeGetMaxMajorTest) {
   EXPECT_FLOAT_EQ(0, stroke.MaxMajorRadius());
   base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
 #else
       CreatePalmFilterDeviceInfo(kNocturneTouchScreen);
@@ -341,7 +341,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, SampleRadiusConversion) {
   model_config_.radius_polynomial_resize = {71.3};
   base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
       CreatePalmFilterDeviceInfo(nocturne_touchscreen_);
 #else
       CreatePalmFilterDeviceInfo(kNocturneTouchScreen);

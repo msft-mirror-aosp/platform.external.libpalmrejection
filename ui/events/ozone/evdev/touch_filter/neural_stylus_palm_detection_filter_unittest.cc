@@ -11,7 +11,7 @@
 #include "base/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_test_util.h"
 #else
 #include "chrome_to_android_compatibility_test_support.h"
@@ -51,7 +51,7 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
     EXPECT_CALL(*model_, config())
         .Times(testing::AnyNumber())
         .WillRepeatedly(testing::ReturnRef(model_config_));
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
     EXPECT_TRUE(
         CapabilitiesToDeviceInfo(kNocturneTouchScreen, &nocturne_touchscreen_));
     palm_detection_filter_ = std::make_unique<NeuralStylusPalmDetectionFilter>(
@@ -80,7 +80,7 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
  protected:
   std::vector<InProgressTouchEvdev> touch_;
   std::unique_ptr<SharedPalmDetectionFilterState> shared_palm_state;
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
   EventDeviceInfo nocturne_touchscreen_;
 #endif
   // Owned by the filter.
@@ -92,7 +92,7 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
 class NeuralStylusPalmDetectionFilterDeathTest
     : public NeuralStylusPalmDetectionFilterTest {};
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 TEST_F(NeuralStylusPalmDetectionFilterTest, EventDeviceSimpleTest) {
   EventDeviceInfo devinfo;
   std::vector<std::pair<DeviceCapabilities, bool>> devices = {
