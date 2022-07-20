@@ -31,7 +31,6 @@ class COMPONENT_EXPORT(EVDEV) OneDeviceTrainNeuralStylusPalmDetectionFilterModel
 
   const NeuralStylusPalmDetectionFilterModelConfig& config() const override;
 
-  // Config is further modified by Android classes inheriting from this class
  protected:
   NeuralStylusPalmDetectionFilterModelConfig config_;
 
