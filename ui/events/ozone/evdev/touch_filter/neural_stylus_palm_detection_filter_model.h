@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 
 namespace ui {
@@ -95,16 +96,11 @@ struct COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilterModelConfig {
   // check if it's spurious and mark it held if so.
   std::unordered_set<uint32_t> early_stage_sample_counts;
 
-  // True if the touch data should be resampled. Enable this if your device
-  // has a non-120 Hz touchscreen. Since the model is hardcoded to assume 8 ms
-  // between samples, non-120Hz touchscreens will not work correctly without
-  // resampling.
-  bool resample_touch = false;
-
-  // Time between resampled values. This must match the period hardcoded
-  // into the model, so it's made const. It can only be updated at compile
-  // time, together with the model.
-  const base::TimeDelta resample_period = base::Milliseconds(8.0);
+  // If set, time between values to resample. Must match the value coded into
+  // model. Currently the model is developed for 120Hz touch devices, so this
+  // value must be set to "8 ms" if your device has a different refresh rate.
+  // If not set, no resampling is done.
+  base::Optional<base::TimeDelta> resample_period;
 };
 
 // An abstract model utilized by NueralStylusPalmDetectionFilter.

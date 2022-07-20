@@ -161,9 +161,8 @@ void NeuralStylusPalmDetectionFilter::Filter(
       DCHECK(strokes_.count(tracking_id) == 0)
           << " Tracking id " << tracking_id;
 
-      strokes_.emplace(
-          std::make_pair(tracking_id, PalmFilterStroke(model_->config())));
-      strokes_.find(tracking_id)->second.SetTrackingId(tracking_id);
+      strokes_.emplace(tracking_id,
+                       PalmFilterStroke(model_->config(), tracking_id));
       tracking_ids_[slot] = tracking_id;
       is_palm_.set(slot, false);
       is_delay_.set(slot, false);
@@ -228,7 +227,7 @@ void NeuralStylusPalmDetectionFilter::Filter(
         config.early_stage_sample_counts.find(stroke.samples_seen()) !=
             config.early_stage_sample_counts.end()) {
       VLOG(1) << "About to run a early_stage prediction.";
-      if (DetectSpuriousStroke(ExtractFeatures(tracking_id), tracking_id,
+      if (DetectSpuriousStroke(ExtractFeatures(tracking_id),
                                model_->config().output_threshold)) {
         VLOG(1) << "hold detected.";
         is_delay_.set(slot, true);
@@ -245,15 +244,14 @@ void NeuralStylusPalmDetectionFilter::Filter(
       LOG(DFATAL) << "Unable to find marked stroke.";
       continue;
     }
-    auto& stroke = lookup->second;
+    const auto& stroke = lookup->second;
     if (stroke.samples_seen() < model_->config().min_sample_count) {
       // in very short strokes: we use a heuristic.
       is_palm_.set(slot, IsHeuristicPalmStroke(stroke));
       continue;
     }
-    is_palm_.set(slot,
-                 DetectSpuriousStroke(ExtractFeatures(tracking_id), tracking_id,
-                                      model_->config().output_threshold));
+    is_palm_.set(slot, DetectSpuriousStroke(ExtractFeatures(tracking_id),
+                                            model_->config().output_threshold));
     if (is_palm_.test(slot)) {
       shared_palm_state_->latest_palm_touch_time = time;
     }
@@ -320,7 +318,6 @@ bool NeuralStylusPalmDetectionFilter::IsHeuristicPalmStroke(
 
 bool NeuralStylusPalmDetectionFilter::DetectSpuriousStroke(
     const std::vector<float>& features,
-    int tracking_id,
     float threshold) const {
   auto inference_value = model_->Inference(features);
   if (VLOG_IS_ON(1)) {
@@ -534,4 +531,46 @@ void NeuralStylusPalmDetectionFilter::EraseOldStrokes(base::TimeTicks time) {
   }
   previous_report_time_ = time;
 }
+
+static std::string addLinePrefix(std::string str, const std::string& prefix) {
+  std::stringstream ss;
+  bool newLineStarted = true;
+  for (const auto& ch : str) {
+    if (newLineStarted) {
+      ss << prefix;
+      newLineStarted = false;
+    }
+    if (ch == '\n') {
+      newLineStarted = true;
+    }
+    ss << ch;
+  }
+  return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const NeuralStylusPalmDetectionFilter& filter) {
+  out << "NeuralStylusPalmDetectionFilter(\n";
+  out << "  is_palm_ = " << filter.is_palm_ << "\n";
+  out << "  is_delay_ = " << filter.is_delay_ << "\n";
+  out << "  strokes_ =\n";
+  std::stringstream strokes;
+  strokes << filter.strokes_;
+  out << addLinePrefix(strokes.str(), "    ") << "\n";
+  out << "  previous_report_time_ = " << filter.previous_report_time_ << "\n";
+  out << "  active_tracking_ids_ = " << filter.active_tracking_ids_ << "\n";
+  out << "  tracking_ids_count_within_session_ = "
+      << filter.tracking_ids_count_within_session_ << "\n";
+  out << "  tracking_ids = [";
+  for (int i = 0; i < kNumTouchEvdevSlots; i++) {
+    out << filter.tracking_ids_[i] << ", ";
+  }
+  out << "]\n";
+
+  out << "  palm_filter_dev_info_ = " << filter.palm_filter_dev_info_ << "\n";
+  out << ")\n";
+
+  return out;
+}
+
 }  // namespace ui
