@@ -34,6 +34,9 @@ class COMPONENT_EXPORT(EVDEV) OneDeviceTrainNeuralStylusPalmDetectionFilterModel
   // Config is further modified by Android classes inheriting from this class
  protected:
   NeuralStylusPalmDetectionFilterModelConfig config_;
+
+ private:
+  size_t expected_feature_size_;
 };
 
 }  // namespace ui
