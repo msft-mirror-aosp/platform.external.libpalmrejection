@@ -8,7 +8,7 @@
 
 namespace ui {
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 PalmFilterDeviceInfo CreatePalmFilterDeviceInfo(
     const EventDeviceInfo& devinfo) {
   PalmFilterDeviceInfo info;
