@@ -13,6 +13,16 @@ InProgressTouchEvdev::InProgressTouchEvdev(const InProgressTouchEvdev& other) =
 
 InProgressTouchEvdev::~InProgressTouchEvdev() = default;
 
+std::ostream& operator<<(std::ostream& out, const InProgressTouchEvdev& touch) {
+  out << "InProgressTouchEvdev(x=" << touch.x << ", y=" << touch.y
+      << ", tracking_id=" << touch.tracking_id << ", slot=" << touch.slot
+      << ", pressure=" << touch.pressure << ", major=" << touch.major
+      << ", minor=" << touch.minor << ", tool_type=" << touch.tool_type
+      << ", altered=" << touch.altered << "was_touching=" << touch.was_touching
+      << ", touching=" << touch.touching << ")";
+  return out;
+}
+
 InProgressStylusState::InProgressStylusState() = default;
 
 InProgressStylusState::InProgressStylusState(

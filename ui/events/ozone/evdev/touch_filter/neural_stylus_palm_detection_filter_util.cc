@@ -257,4 +257,76 @@ float PalmFilterStroke::BiggestSize() const {
   return biggest;
 }
 
+static std::string addLinePrefix(std::string str, const std::string& prefix) {
+  std::stringstream ss;
+  bool newLineStarted = true;
+  for (const auto& ch : str) {
+    if (newLineStarted) {
+      ss << prefix;
+      newLineStarted = false;
+    }
+    if (ch == '\n') {
+      newLineStarted = true;
+    }
+    ss << ch;
+  }
+  return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& out, const gfx::PointF& point) {
+  out << "PointF(" << point.x() << ", " << point.y() << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const gfx::Vector2dF& vec) {
+  out << "Vector2dF(" << vec.x() << ", " << vec.y() << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterDeviceInfo& info) {
+  out << "PalmFilterDeviceInfo(max_x=" << info.max_x;
+  out << ", max_y=" << info.max_y;
+  out << ", x_res=" << info.x_res;
+  out << ", y_res=" << info.y_res;
+  out << ", major_radius_res=" << info.major_radius_res;
+  out << ", minor_radius_res=" << info.minor_radius_res;
+  out << ", minor_radius_supported=" << info.minor_radius_supported;
+  out << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterSample& sample) {
+  out << "PalmFilterSample(major=" << sample.major_radius
+      << ", minor=" << sample.minor_radius << ", pressure=" << sample.pressure
+      << ", edge=" << sample.edge << ", tracking_id=" << sample.tracking_id
+      << ", point=" << sample.point << ", time=" << sample.time << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterStroke& stroke) {
+  out << "PalmFilterStroke(\n";
+  out << "  GetCentroid() = " << stroke.GetCentroid() << "\n";
+  out << "  BiggestSize() = " << stroke.BiggestSize() << "\n";
+  out << "  MaxMajorRadius() = " << stroke.MaxMajorRadius() << "\n";
+  std::stringstream stream;
+  stream << stroke.samples();
+  out << "  samples (" << stroke.samples().size() << " total): \n"
+      << addLinePrefix(stream.str(), "    ") << "\n";
+  out << "  samples_seen() = " << stroke.samples_seen() << "\n";
+  out << "  tracking_id() = " << stroke.tracking_id() << "\n";
+  out << "  max_sample_count_ = " << stroke.max_sample_count_ << "\n";
+  if (stroke.resample_period_) {
+    out << "  resample_period_ = " << *(stroke.resample_period_) << "\n";
+    out << "  last_sample_ = " << stroke.last_sample_ << "\n";
+  } else {
+    out << "  resample_period_  = <not set>\n";
+    out << "  last_sample_ = <not valid b/c resampling is off>\n";
+  }
+  out << "  unscaled_centroid_ = " << stroke.unscaled_centroid_ << "\n";
+  out << "  unscaled_centroid_sum_error_ = "
+      << stroke.unscaled_centroid_sum_error_ << "\n";
+  out << ")\n";
+  return out;
+}
+
 }  // namespace ui

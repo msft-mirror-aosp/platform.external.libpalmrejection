@@ -78,6 +78,8 @@ struct COMPONENT_EXPORT(EVDEV) InProgressTouchEvdev {
   bool stylus_button = false;
 };
 
+std::ostream& operator<<(std::ostream& out, const InProgressTouchEvdev& touch);
+
 // Contains information about stylus event, the useful relate ddevice info and
 // the timestamp.
 struct COMPONENT_EXPORT(EVDEV) InProgressStylusState {
