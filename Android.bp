@@ -18,13 +18,17 @@ cc_library_static {
     local_include_dirs: ["."],
     export_include_dirs: ["."],
     srcs: [
+        "ui/events/ozone/features.cc",
         "ui/events/ozone/evdev/touch_evdev_types.cc",
         "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter.cc",
         "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.cc",
         "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.cc",
         "ui/events/ozone/evdev/touch_filter/palm_detection_filter.cc",
+        "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.cc",
         "ui/events/ozone/evdev/touch_filter/palm_model/onedevice_train_palm_detection_filter_model.cc",
         "ui/events/ozone/evdev/touch_filter/palm_model/onedevice_train_palm_detection_filter_inference.cc",
+        "ui/events/ozone/evdev/touch_filter/palm_model/onedevice_train_palm_detection_filter_inference_beta.cc",
+        "ui/events/ozone/evdev/touch_filter/palm_model/onedevice_train_palm_detection_filter_inference_v2.cc",
     ],
     visibility: [
         "//frameworks/native/services/inputflinger:__subpackages__",

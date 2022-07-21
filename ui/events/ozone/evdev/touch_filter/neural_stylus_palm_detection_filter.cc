@@ -20,14 +20,12 @@
 #include "base/values.h"
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_info.h"
-#endif
-#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
-#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
-#if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
-#include "ui/events/ozone/features.h"
 #else
 #include <linux/input-event-codes.h>
 #endif
+#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
+#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
+#include "ui/events/ozone/features.h"
 
 namespace ui {
 namespace {
@@ -64,7 +62,7 @@ NeuralStylusPalmDetectionFilter::~NeuralStylusPalmDetectionFilter() {}
 
 void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
     int neighbor_count,
-    unsigned long min_sample_count,
+    unsigned long neighbor_min_sample_count,
     float max_distance,
     const PalmFilterStroke& stroke,
     std::vector<std::pair<float, int>>* biggest_strokes) const {
@@ -78,7 +76,7 @@ void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
     if (neighbor.tracking_id() == stroke.tracking_id()) {
       continue;
     }
-    if (neighbor.samples().size() < min_sample_count) {
+    if (neighbor.samples().size() < neighbor_min_sample_count) {
       continue;
     }
     float distance =
@@ -100,6 +98,7 @@ void NeuralStylusPalmDetectionFilter::FindBiggestNeighborsWithin(
 
 void NeuralStylusPalmDetectionFilter::FindNearestNeighborsWithin(
     int neighbor_count,
+    unsigned long neighbor_min_sample_count,
     float max_distance,
     const PalmFilterStroke& stroke,
     std::vector<std::pair<float, int>>* nearest_strokes) const {
@@ -117,7 +116,7 @@ void NeuralStylusPalmDetectionFilter::FindNearestNeighborsWithin(
     if (neighbor.tracking_id() == stroke.tracking_id()) {
       continue;
     }
-    if (neighbor.samples().size() < model_->config().min_sample_count) {
+    if (neighbor.samples().size() < neighbor_min_sample_count) {
       continue;
     }
     float distance =
@@ -162,9 +161,8 @@ void NeuralStylusPalmDetectionFilter::Filter(
       DCHECK(strokes_.count(tracking_id) == 0)
           << " Tracking id " << tracking_id;
 
-      strokes_.emplace(
-          std::make_pair(tracking_id, PalmFilterStroke(model_->config())));
-      strokes_.find(tracking_id)->second.SetTrackingId(tracking_id);
+      strokes_.emplace(tracking_id,
+                       PalmFilterStroke(model_->config(), tracking_id));
       tracking_ids_[slot] = tracking_id;
       is_palm_.set(slot, false);
       is_delay_.set(slot, false);
@@ -187,7 +185,8 @@ void NeuralStylusPalmDetectionFilter::Filter(
     auto stroke_it = strokes_.find(tracking_id);
 
     if (stroke_it == strokes_.end()) {
-      LOG(DFATAL) << "No stroke found, continue.";
+      // TODO(crbug.com/1256926): Work out why this is hit on long presses.
+      DVLOG(1) << "No stroke found, continue.";
       continue;
     }
 
@@ -208,15 +207,31 @@ void NeuralStylusPalmDetectionFilter::Filter(
     stroke.ProcessSample(CreatePalmFilterSample(touch, time, model_->config(),
                                                 palm_filter_dev_info_));
     if (!is_palm_.test(slot) && ShouldDecideStroke(stroke)) {
+      // slots_to_decide will have is_delay_ set to false anyway, no need to do
+      // the delay detection.
       slots_to_decide.insert(slot);
+      continue;
     }
 
+    // Heuristic delay detection.
     if (config.heuristic_delay_start_if_palm && !end_of_stroke &&
         stroke.samples_seen() < config.max_sample_count &&
         IsHeuristicPalmStroke(stroke)) {
       //  A stroke that we _think_ may be a palm, but is too short to decide
       //  yet. So we mark for delay for now.
       is_delay_.set(slot, true);
+    }
+
+    // Early stage delay detection that marks suspicious palms for delay.
+    if (!is_delay_.test(slot) && config.nn_delay_start_if_palm &&
+        config.early_stage_sample_counts.find(stroke.samples_seen()) !=
+            config.early_stage_sample_counts.end()) {
+      VLOG(1) << "About to run a early_stage prediction.";
+      if (DetectSpuriousStroke(ExtractFeatures(tracking_id),
+                               model_->config().output_threshold)) {
+        VLOG(1) << "hold detected.";
+        is_delay_.set(slot, true);
+      }
     }
   }
 
@@ -229,14 +244,14 @@ void NeuralStylusPalmDetectionFilter::Filter(
       LOG(DFATAL) << "Unable to find marked stroke.";
       continue;
     }
-    auto& stroke = lookup->second;
+    const auto& stroke = lookup->second;
     if (stroke.samples_seen() < model_->config().min_sample_count) {
       // in very short strokes: we use a heuristic.
       is_palm_.set(slot, IsHeuristicPalmStroke(stroke));
       continue;
     }
     is_palm_.set(slot, DetectSpuriousStroke(ExtractFeatures(tracking_id),
-                                            tracking_id, 0.0));
+                                            model_->config().output_threshold));
     if (is_palm_.test(slot)) {
       shared_palm_state_->latest_palm_touch_time = time;
     }
@@ -287,9 +302,9 @@ bool NeuralStylusPalmDetectionFilter::IsHeuristicPalmStroke(
       return true;
     }
     std::vector<std::pair<float, int>> biggest_strokes;
-    FindBiggestNeighborsWithin(1 /* neighbors */, 1 /* min sample count */,
-                               model_->config().max_neighbor_distance_in_mm,
-                               stroke, &biggest_strokes);
+    FindBiggestNeighborsWithin(
+        1 /* neighbors */, 1 /* neighbor min sample count */,
+        model_->config().max_neighbor_distance_in_mm, stroke, &biggest_strokes);
     if (!biggest_strokes.empty() &&
         strokes_.find(biggest_strokes[0].second)->second.BiggestSize() >=
             config.heuristic_palm_area_limit) {
@@ -303,7 +318,6 @@ bool NeuralStylusPalmDetectionFilter::IsHeuristicPalmStroke(
 
 bool NeuralStylusPalmDetectionFilter::DetectSpuriousStroke(
     const std::vector<float>& features,
-    int tracking_id,
     float threshold) const {
   auto inference_value = model_->Inference(features);
   if (VLOG_IS_ON(1)) {
@@ -324,12 +338,11 @@ std::vector<float> NeuralStylusPalmDetectionFilter::ExtractFeatures(
   const int features_per_stroke = features.size();
   std::vector<std::pair<float, int>> nearest_strokes, biggest_strokes;
   const NeuralStylusPalmDetectionFilterModelConfig& config = model_->config();
-  FindNearestNeighborsWithin(config.nearest_neighbor_count,
-                             config.max_neighbor_distance_in_mm, stroke,
-                             &nearest_strokes);
+  FindNearestNeighborsWithin(
+      config.nearest_neighbor_count, config.neighbor_min_sample_count,
+      config.max_neighbor_distance_in_mm, stroke, &nearest_strokes);
   FindBiggestNeighborsWithin(
-      config.biggest_near_neighbor_count,
-      model_->config().min_sample_count /* min sample count */,
+      config.biggest_near_neighbor_count, config.neighbor_min_sample_count,
       config.max_neighbor_distance_in_mm, stroke, &biggest_strokes);
   for (uint32_t i = 0; i < config.nearest_neighbor_count; ++i) {
     if (i < nearest_strokes.size()) {
@@ -456,8 +469,8 @@ bool NeuralStylusPalmDetectionFilter::
     return false;
   }
 
-  // Optionally, we use touch_minor if it's around, so check it's good if it is
-  // present.
+  // Optionally, we use touch_minor if it's around, so check it's good if it
+  // is present.
   if (devinfo.HasAbsEvent(ABS_MT_TOUCH_MINOR) &&
       !code_check(ABS_MT_TOUCH_MINOR)) {
     return false;
@@ -518,4 +531,46 @@ void NeuralStylusPalmDetectionFilter::EraseOldStrokes(base::TimeTicks time) {
   }
   previous_report_time_ = time;
 }
+
+static std::string addLinePrefix(std::string str, const std::string& prefix) {
+  std::stringstream ss;
+  bool newLineStarted = true;
+  for (const auto& ch : str) {
+    if (newLineStarted) {
+      ss << prefix;
+      newLineStarted = false;
+    }
+    if (ch == '\n') {
+      newLineStarted = true;
+    }
+    ss << ch;
+  }
+  return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const NeuralStylusPalmDetectionFilter& filter) {
+  out << "NeuralStylusPalmDetectionFilter(\n";
+  out << "  is_palm_ = " << filter.is_palm_ << "\n";
+  out << "  is_delay_ = " << filter.is_delay_ << "\n";
+  out << "  strokes_ =\n";
+  std::stringstream strokes;
+  strokes << filter.strokes_;
+  out << addLinePrefix(strokes.str(), "    ") << "\n";
+  out << "  previous_report_time_ = " << filter.previous_report_time_ << "\n";
+  out << "  active_tracking_ids_ = " << filter.active_tracking_ids_ << "\n";
+  out << "  tracking_ids_count_within_session_ = "
+      << filter.tracking_ids_count_within_session_ << "\n";
+  out << "  tracking_ids = [";
+  for (int i = 0; i < kNumTouchEvdevSlots; i++) {
+    out << filter.tracking_ids_[i] << ", ";
+  }
+  out << "]\n";
+
+  out << "  palm_filter_dev_info_ = " << filter.palm_filter_dev_info_ << "\n";
+  out << ")\n";
+
+  return out;
+}
+
 }  // namespace ui

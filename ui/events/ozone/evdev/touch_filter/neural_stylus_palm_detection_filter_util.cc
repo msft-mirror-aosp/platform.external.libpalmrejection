@@ -65,13 +65,28 @@ float interpolate(float start_value, float end_value, float proportion) {
   return start_value + (end_value - start_value) * proportion;
 }
 
+/**
+ * During resampling, the later events are used as a basis to populate
+ * non-resampled fields like major and minor. However, if the requested time is
+ * within this delay of the earlier event, the earlier event will be used as a
+ * basis instead.
+ */
+const static auto kPreferInitialEventDelay =
+    base::TimeDelta::FromMicroseconds(1);
+
+/**
+ * Interpolate between the "before" and "after" events to get a resampled value
+ * at the timestamp 'time'. Not all fields are interpolated. For fields that are
+ * not interpolated, the values are taken from the 'after' sample unless the
+ * requested time is very close to the 'before' sample.
+ */
 PalmFilterSample getSampleAtTime(base::TimeTicks time,
                                  const PalmFilterSample& before,
                                  const PalmFilterSample& after) {
   // Use the newest sample as the base, except when the requested time is very
   // close to the 'before' sample.
   PalmFilterSample result = after;
-  if (time - before.time < base::TimeDelta::FromMicroseconds(1)) {
+  if (time - before.time < kPreferInitialEventDelay) {
     result = before;
   }
   // Only the x and y values are interpolated. We could also interpolate the
@@ -127,24 +142,25 @@ PalmFilterSample CreatePalmFilterSample(
 }
 
 PalmFilterStroke::PalmFilterStroke(
-    const NeuralStylusPalmDetectionFilterModelConfig& model_config)
-    : model_config_(model_config) {}
+    const NeuralStylusPalmDetectionFilterModelConfig& model_config,
+    int tracking_id)
+    : tracking_id_(tracking_id),
+      max_sample_count_(model_config.max_sample_count),
+      resample_period_(model_config.resample_period) {}
 PalmFilterStroke::PalmFilterStroke(const PalmFilterStroke& other) = default;
 PalmFilterStroke::PalmFilterStroke(PalmFilterStroke&& other) = default;
+PalmFilterStroke::~PalmFilterStroke() {}
 
 void PalmFilterStroke::ProcessSample(const PalmFilterSample& sample) {
-  if (samples_seen_ == 0) {
-    tracking_id_ = sample.tracking_id;
-  }
   DCHECK_EQ(tracking_id_, sample.tracking_id);
-  if (model_config_.resample_touch) {
+  if (resample_period_.has_value()) {
     Resample(sample);
     return;
   }
 
   AddSample(sample);
 
-  while (samples_.size() > model_config_.max_sample_count) {
+  while (samples_.size() > max_sample_count_) {
     AddToUnscaledCentroid(-samples_.front().point.OffsetFromOrigin());
     samples_.pop_front();
   }
@@ -171,17 +187,16 @@ void PalmFilterStroke::Resample(const PalmFilterSample& sample) {
   // We already have a valid last sample here.
   DCHECK_LE(last_sample_.time, sample.time);
   // Generate resampled values
-  base::TimeTicks next_sample_time =
-      samples_.back().time + model_config_.resample_period;
+  base::TimeTicks next_sample_time = samples_.back().time + *resample_period_;
   while (next_sample_time <= sample.time) {
     AddSample(getSampleAtTime(next_sample_time, last_sample_, sample));
-    next_sample_time = samples_.back().time + model_config_.resample_period;
+    next_sample_time = samples_.back().time + (*resample_period_);
   }
   last_sample_ = sample;
 
   // Prune the resampled collection
   while ((samples_.back().time - samples_.front().time) >=
-         model_config_.resample_period * model_config_.max_sample_count) {
+         (*resample_period_) * max_sample_count_) {
     AddToUnscaledCentroid(-samples_.front().point.OffsetFromOrigin());
     samples_.pop_front();
   }
@@ -215,10 +230,6 @@ uint64_t PalmFilterStroke::samples_seen() const {
   return samples_seen_;
 }
 
-void PalmFilterStroke::SetTrackingId(int tracking_id) {
-  tracking_id_ = tracking_id;
-}
-
 float PalmFilterStroke::MaxMajorRadius() const {
   float maximum = 0.0;
   for (const auto& sample : samples_) {
@@ -239,6 +250,78 @@ float PalmFilterStroke::BiggestSize() const {
     biggest = std::max(biggest, size);
   }
   return biggest;
+}
+
+static std::string addLinePrefix(std::string str, const std::string& prefix) {
+  std::stringstream ss;
+  bool newLineStarted = true;
+  for (const auto& ch : str) {
+    if (newLineStarted) {
+      ss << prefix;
+      newLineStarted = false;
+    }
+    if (ch == '\n') {
+      newLineStarted = true;
+    }
+    ss << ch;
+  }
+  return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& out, const gfx::PointF& point) {
+  out << "PointF(" << point.x() << ", " << point.y() << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const gfx::Vector2dF& vec) {
+  out << "Vector2dF(" << vec.x() << ", " << vec.y() << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterDeviceInfo& info) {
+  out << "PalmFilterDeviceInfo(max_x=" << info.max_x;
+  out << ", max_y=" << info.max_y;
+  out << ", x_res=" << info.x_res;
+  out << ", y_res=" << info.y_res;
+  out << ", major_radius_res=" << info.major_radius_res;
+  out << ", minor_radius_res=" << info.minor_radius_res;
+  out << ", minor_radius_supported=" << info.minor_radius_supported;
+  out << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterSample& sample) {
+  out << "PalmFilterSample(major=" << sample.major_radius
+      << ", minor=" << sample.minor_radius << ", pressure=" << sample.pressure
+      << ", edge=" << sample.edge << ", tracking_id=" << sample.tracking_id
+      << ", point=" << sample.point << ", time=" << sample.time << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const PalmFilterStroke& stroke) {
+  out << "PalmFilterStroke(\n";
+  out << "  GetCentroid() = " << stroke.GetCentroid() << "\n";
+  out << "  BiggestSize() = " << stroke.BiggestSize() << "\n";
+  out << "  MaxMajorRadius() = " << stroke.MaxMajorRadius() << "\n";
+  std::stringstream stream;
+  stream << stroke.samples();
+  out << "  samples (" << stroke.samples().size() << " total): \n"
+      << addLinePrefix(stream.str(), "    ") << "\n";
+  out << "  samples_seen() = " << stroke.samples_seen() << "\n";
+  out << "  tracking_id() = " << stroke.tracking_id() << "\n";
+  out << "  max_sample_count_ = " << stroke.max_sample_count_ << "\n";
+  if (stroke.resample_period_) {
+    out << "  resample_period_ = " << *(stroke.resample_period_) << "\n";
+    out << "  last_sample_ = " << stroke.last_sample_ << "\n";
+  } else {
+    out << "  resample_period_  = <not set>\n";
+    out << "  last_sample_ = <not valid b/c resampling is off>\n";
+  }
+  out << "  unscaled_centroid_ = " << stroke.unscaled_centroid_ << "\n";
+  out << "  unscaled_centroid_sum_error_ = "
+      << stroke.unscaled_centroid_sum_error_ << "\n";
+  out << ")\n";
+  return out;
 }
 
 }  // namespace ui
