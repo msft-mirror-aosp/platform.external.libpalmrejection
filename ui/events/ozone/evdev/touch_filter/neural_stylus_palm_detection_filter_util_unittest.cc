@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #if defined(__ANDROID__) || defined(__ANDROID_HOST__)
 #include <linux/input-event-codes.h>
@@ -19,6 +20,9 @@
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/shared_palm_detection_filter_state.h"
+
+using ::testing::ElementsAre;
+using ::testing::IsEmpty;
 
 namespace ui {
 
@@ -83,6 +87,11 @@ bool CapabilitiesToDeviceInfo(DeviceType, EventDeviceInfo*) {
 }
 #endif
 
+MATCHER_P(SampleTime, time, "Does the sample have given time.") {
+  *result_listener << "Sample time" << arg.time << " is not " << time;
+  return time == arg.time;
+}
+
 class NeuralStylusPalmDetectionFilterUtilTest
     : public testing::TestWithParam<bool> {
  public:
@@ -103,7 +112,10 @@ class NeuralStylusPalmDetectionFilterUtilTest
     touch_.x = 21;
     touch_.y = 20;
     model_config_.max_sample_count = 3;
-    model_config_.resample_touch = GetParam();
+    const bool resample_touch = GetParam();
+    if (resample_touch) {
+      model_config_.resample_period = base::Milliseconds(8);
+    }
   }
 
  protected:
@@ -140,8 +152,8 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, DistilledNocturneTest) {
 }
 
 TEST_P(NeuralStylusPalmDetectionFilterUtilTest, NoMinorResTest) {
-  // Nocturne has minor resolution: but lets pretend it didnt. we should recover
-  // "1" as the resolution.
+  // Nocturne has minor resolution, but let's pretend it doesn't. we should
+  // recover "1" as the resolution.
   auto abs_info = nocturne_touchscreen_.GetAbsInfoByCode(ABS_MT_TOUCH_MINOR);
   abs_info.resolution = 0;
   nocturne_touchscreen_.SetAbsInfo(ABS_MT_TOUCH_MINOR, abs_info);
@@ -222,8 +234,8 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, LinkTouchscreenSampleTest) {
 }
 
 TEST_P(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterStrokeTest) {
-  PalmFilterStroke stroke(model_config_);
-  EXPECT_EQ(0, stroke.tracking_id());
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 55);
+  touch_.tracking_id = 55;
   // With no points, center is 0.
   EXPECT_EQ(gfx::PointF(0., 0.), stroke.GetCentroid());
 
@@ -239,7 +251,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterStrokeTest) {
     touch_.x = 15 + i;
     PalmFilterSample sample =
         CreatePalmFilterSample(touch_, time, model_config_, nocturne_distilled);
-    time += model_config_.resample_period;
+    time += base::Milliseconds(8);
     stroke.ProcessSample(std::move(sample));
     EXPECT_EQ(touch_.tracking_id, stroke.tracking_id());
     if (i < 3) {
@@ -260,14 +272,13 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, PalmFilterStrokeTest) {
     ASSERT_FLOAT_EQ(expected_centroid.x(), stroke.GetCentroid().x())
         << "failed at i " << i;
   }
-  stroke.SetTrackingId(55);
-  EXPECT_EQ(55, stroke.tracking_id());
 }
 
 TEST_P(NeuralStylusPalmDetectionFilterUtilTest,
        PalmFilterStrokeBiggestSizeTest) {
-  PalmFilterStroke stroke(model_config_);
-  PalmFilterStroke no_minor_stroke(model_config_);
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 0);
+  PalmFilterStroke no_minor_stroke(model_config_, /*tracking_id*/ 0);
+  touch_.tracking_id = stroke.tracking_id();
   EXPECT_EQ(0, stroke.BiggestSize());
 
   base::TimeTicks time = base::TimeTicks() + base::Seconds(30);
@@ -292,7 +303,7 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest,
     no_minor_stroke.ProcessSample(std::move(second_sample));
     EXPECT_FLOAT_EQ((2 + i) * (2 + i), no_minor_stroke.BiggestSize());
     ASSERT_EQ(std::min(3ul, 1ul + i), stroke.samples().size());
-    time += model_config_.resample_period;
+    time += base::Milliseconds(8);
   }
 }
 
@@ -315,7 +326,8 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, UnscaledMajorMinorResolution) {
 }
 
 TEST_P(NeuralStylusPalmDetectionFilterUtilTest, StrokeGetMaxMajorTest) {
-  PalmFilterStroke stroke(model_config_);
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 0);
+  touch_.tracking_id = stroke.tracking_id();
   EXPECT_FLOAT_EQ(0, stroke.MaxMajorRadius());
   base::TimeTicks time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
   const PalmFilterDeviceInfo nocturne_distilled =
@@ -362,70 +374,66 @@ TEST_P(NeuralStylusPalmDetectionFilterUtilTest, SampleRadiusConversion) {
 TEST(PalmFilterStrokeTest, NumberOfResampledValues) {
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
   model_config_.max_sample_count = 3;
-  model_config_.resample_touch = true;
+  model_config_.resample_period = base::Milliseconds(8);
   base::TimeTicks down_time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
 
-  PalmFilterStroke stroke(model_config_);
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 0);
   const PalmFilterDeviceInfo device_info;
 
   // Initially, no samples
-  ASSERT_EQ(0u, stroke.samples().size());
+  ASSERT_THAT(stroke.samples(), IsEmpty());
   ASSERT_EQ(0u, stroke.samples_seen());
 
   // Add first sample at time = T
   InProgressTouchEvdev touch_;
+  touch_.tracking_id = stroke.tracking_id();
   PalmFilterSample sample =
       CreatePalmFilterSample(touch_, down_time, model_config_, device_info);
   stroke.ProcessSample(sample);
-  ASSERT_EQ(1u, stroke.samples().size());
+  ASSERT_THAT(stroke.samples(), ElementsAre(SampleTime(down_time)));
   ASSERT_EQ(1u, stroke.samples_seen());
-  ASSERT_EQ(down_time, stroke.samples().back().time);
 
   // Add second sample at time = T + 2ms. It's not yet time for the new frame,
   // so no new sample should be generated.
   base::TimeTicks time = down_time + base::Milliseconds(4);
   sample = CreatePalmFilterSample(touch_, time, model_config_, device_info);
   stroke.ProcessSample(sample);
-  ASSERT_EQ(1u, stroke.samples().size());
+  ASSERT_THAT(stroke.samples(), ElementsAre(SampleTime(down_time)));
   ASSERT_EQ(1u, stroke.samples_seen());
-  ASSERT_EQ(down_time, stroke.samples().back().time);
 
   // Add third sample at time = T + 10ms. An event at time = T + 8ms should be
   // generated.
   time = down_time + base::Milliseconds(10);
   sample = CreatePalmFilterSample(touch_, time, model_config_, device_info);
   stroke.ProcessSample(sample);
-  ASSERT_EQ(2u, stroke.samples().size());
+  ASSERT_THAT(stroke.samples(),
+              ElementsAre(SampleTime(down_time),
+                          SampleTime(down_time + base::Milliseconds(8))));
   ASSERT_EQ(2u, stroke.samples_seen());
-  ASSERT_EQ(down_time + base::Milliseconds(8), stroke.samples().back().time);
 }
 
 TEST(PalmFilterStrokeTest, ResamplingTest) {
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
   model_config_.max_sample_count = 3;
-  model_config_.resample_touch = true;
+  model_config_.resample_period = base::Milliseconds(8);
 
-  PalmFilterStroke stroke(model_config_);
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 0);
   PalmFilterDeviceInfo device_info;
   device_info.minor_radius_supported = true;
 
   // Add first sample at time = T
   InProgressTouchEvdev touch_;
+  touch_.tracking_id = stroke.tracking_id();
   touch_.x = 1;
   touch_.y = 2;
   touch_.major = 4;
   touch_.minor = 3;
   base::TimeTicks down_time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
-  PalmFilterSample sample =
+  PalmFilterSample sample1 =
       CreatePalmFilterSample(touch_, down_time, model_config_, device_info);
-  stroke.ProcessSample(sample);
+  stroke.ProcessSample(sample1);
   // First sample should not be modified
-  ASSERT_EQ(1u, stroke.samples().size());
-  EXPECT_EQ(1, stroke.samples().back().point.x());
-  EXPECT_EQ(2, stroke.samples().back().point.y());
-  EXPECT_EQ(4, stroke.samples().back().major_radius);
-  EXPECT_EQ(3, stroke.samples().back().minor_radius);
-  EXPECT_EQ(down_time, stroke.samples().back().time);
+  ASSERT_THAT(stroke.samples(), ElementsAre(sample1));
 
   // Add second sample at time = T + 2ms. It's not yet time for the new frame,
   // so no new sample should be generated.
@@ -434,9 +442,11 @@ TEST(PalmFilterStrokeTest, ResamplingTest) {
   touch_.y = 20;
   touch_.major = 12;
   touch_.minor = 11;
-  sample = CreatePalmFilterSample(touch_, time, model_config_, device_info);
-  stroke.ProcessSample(sample);
-  ASSERT_EQ(1u, stroke.samples().size());
+  PalmFilterSample sample2 =
+      CreatePalmFilterSample(touch_, time, model_config_, device_info);
+  stroke.ProcessSample(sample2);
+  // The samples should remain unchanged
+  ASSERT_THAT(stroke.samples(), ElementsAre(sample1));
 
   // Add third sample at time = T + 12ms. A resampled event at time = T + 8ms
   // should be generated.
@@ -445,42 +455,41 @@ TEST(PalmFilterStrokeTest, ResamplingTest) {
   touch_.y = 24;
   touch_.major = 14;
   touch_.minor = 13;
-  sample = CreatePalmFilterSample(touch_, time, model_config_, device_info);
-  stroke.ProcessSample(sample);
-  ASSERT_EQ(2u, stroke.samples().size());
+  PalmFilterSample sample3 =
+      CreatePalmFilterSample(touch_, time, model_config_, device_info);
+  stroke.ProcessSample(sample3);
+  ASSERT_THAT(
+      stroke.samples(),
+      ElementsAre(sample1, SampleTime(down_time + base::Milliseconds(8))));
+
   EXPECT_EQ(150, stroke.samples().back().point.x());
   EXPECT_EQ(22, stroke.samples().back().point.y());
   EXPECT_EQ(14, stroke.samples().back().major_radius);
   EXPECT_EQ(13, stroke.samples().back().minor_radius);
-  EXPECT_EQ(down_time + base::Milliseconds(8), stroke.samples().back().time);
 }
 
 TEST(PalmFilterStrokeTest, MultipleResampledValues) {
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
   model_config_.max_sample_count = 3;
-  model_config_.resample_touch = true;
+  model_config_.resample_period = base::Milliseconds(8);
 
-  PalmFilterStroke stroke(model_config_);
+  PalmFilterStroke stroke(model_config_, /*tracking_id*/ 0);
   PalmFilterDeviceInfo device_info;
   device_info.minor_radius_supported = true;
 
   // Add first sample at time = T
   InProgressTouchEvdev touch_;
+  touch_.tracking_id = stroke.tracking_id();
   touch_.x = 0;
   touch_.y = 10;
   touch_.major = 200;
   touch_.minor = 100;
   base::TimeTicks down_time = base::TimeTicks::UnixEpoch() + base::Seconds(30);
-  PalmFilterSample sample =
+  PalmFilterSample sample1 =
       CreatePalmFilterSample(touch_, down_time, model_config_, device_info);
-  stroke.ProcessSample(sample);
-  // First sample should not be modified
-  ASSERT_EQ(1u, stroke.samples().size());
-  EXPECT_EQ(0, stroke.samples().back().point.x());
-  EXPECT_EQ(10, stroke.samples().back().point.y());
-  EXPECT_EQ(200, stroke.samples().back().major_radius);
-  EXPECT_EQ(100, stroke.samples().back().minor_radius);
-  EXPECT_EQ(down_time, stroke.samples().back().time);
+  stroke.ProcessSample(sample1);
+  // First sample should go in as is
+  ASSERT_THAT(stroke.samples(), ElementsAre(sample1));
 
   // Add second sample at time = T + 20ms. Two resampled values should be
   // generated: 1) at time = T+8ms 2) at time = T+16ms
@@ -489,23 +498,25 @@ TEST(PalmFilterStrokeTest, MultipleResampledValues) {
   touch_.y = 30;
   touch_.major = 220;
   touch_.minor = 120;
-  sample = CreatePalmFilterSample(touch_, time, model_config_, device_info);
-  stroke.ProcessSample(sample);
-  ASSERT_EQ(3u, stroke.samples().size());
+  PalmFilterSample sample2 =
+      CreatePalmFilterSample(touch_, time, model_config_, device_info);
+  stroke.ProcessSample(sample2);
+  ASSERT_THAT(stroke.samples(),
+              ElementsAre(SampleTime(down_time),
+                          SampleTime(down_time + base::Milliseconds(8)),
+                          SampleTime(down_time + base::Milliseconds(16))));
 
   // First sample : time = T + 8ms
   EXPECT_EQ(8, stroke.samples()[1].point.x());
   EXPECT_EQ(18, stroke.samples()[1].point.y());
   EXPECT_EQ(220, stroke.samples()[1].major_radius);
   EXPECT_EQ(120, stroke.samples()[1].minor_radius);
-  EXPECT_EQ(down_time + base::Milliseconds(8), stroke.samples()[1].time);
 
   // Second sample : time = T + 16ms
   EXPECT_EQ(16, stroke.samples().back().point.x());
   EXPECT_EQ(26, stroke.samples().back().point.y());
   EXPECT_EQ(220, stroke.samples().back().major_radius);
   EXPECT_EQ(120, stroke.samples().back().minor_radius);
-  EXPECT_EQ(down_time + base::Milliseconds(16), stroke.samples().back().time);
 }
 
 }  // namespace ui
