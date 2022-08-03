@@ -18,7 +18,8 @@ std::ostream& operator<<(std::ostream& out, const InProgressTouchEvdev& touch) {
       << ", tracking_id=" << touch.tracking_id << ", slot=" << touch.slot
       << ", pressure=" << touch.pressure << ", major=" << touch.major
       << ", minor=" << touch.minor << ", tool_type=" << touch.tool_type
-      << ", altered=" << touch.altered << "was_touching=" << touch.was_touching
+      << ", altered=" << touch.altered
+      << ", was_touching=" << touch.was_touching
       << ", touching=" << touch.touching << ")";
   return out;
 }
