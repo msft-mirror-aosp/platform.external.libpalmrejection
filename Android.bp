@@ -18,6 +18,7 @@ cc_library_static {
     local_include_dirs: ["."],
     export_include_dirs: ["."],
     srcs: [
+        "chrome_to_android_compatibility.cc",
         "ui/events/ozone/features.cc",
         "ui/events/ozone/evdev/touch_evdev_types.cc",
         "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter.cc",
