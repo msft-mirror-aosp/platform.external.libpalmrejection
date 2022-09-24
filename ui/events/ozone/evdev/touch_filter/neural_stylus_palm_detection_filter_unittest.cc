@@ -14,7 +14,7 @@
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
 #include "ui/events/ozone/evdev/event_device_test_util.h"
 #else
-#include "chrome_to_android_compatibility_test_support.h"
+#include "chrome_to_android_compatibility.h"
 #endif
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_detection_filter.h"
@@ -29,7 +29,8 @@ class MockNeuralModel : public NeuralStylusPalmDetectionFilterModel {
                      const NeuralStylusPalmDetectionFilterModelConfig&());
 };
 
-class NeuralStylusPalmDetectionFilterTest : public testing::Test {
+class NeuralStylusPalmDetectionFilterTest
+    : public testing::TestWithParam<float> {
  public:
   NeuralStylusPalmDetectionFilterTest() = default;
 
@@ -48,6 +49,11 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
     model_config_.heuristic_palm_touch_limit = 40;
     model_config_.heuristic_palm_area_limit = 1000;
     model_config_.max_dead_neighbor_time = base::Milliseconds(100);
+    const float resample_period = GetParam();
+    if (resample_period != 0.0) {
+      model_config_.resample_period = base::Milliseconds(resample_period);
+      sample_period_ = *model_config_.resample_period;
+    }
     EXPECT_CALL(*model_, config())
         .Times(testing::AnyNumber())
         .WillRepeatedly(testing::ReturnRef(model_config_));
@@ -87,13 +93,19 @@ class NeuralStylusPalmDetectionFilterTest : public testing::Test {
   MockNeuralModel* model_;
   NeuralStylusPalmDetectionFilterModelConfig model_config_;
   std::unique_ptr<PalmDetectionFilter> palm_detection_filter_;
+  base::TimeDelta sample_period_ = base::Milliseconds(8);
 };
 
-class NeuralStylusPalmDetectionFilterDeathTest
-    : public NeuralStylusPalmDetectionFilterTest {};
+INSTANTIATE_TEST_SUITE_P(ParametricFilterTest,
+                         NeuralStylusPalmDetectionFilterTest,
+                         ::testing::Values(0, 8.0),
+                         [](const auto& paramInfo) {
+                           return paramInfo.param != 0.0 ? "ResamplingEnabled"
+                                                         : "ResamplingDisabled";
+                         });
 
 #if !defined(__ANDROID__) && !defined(__ANDROID_HOST__)
-TEST_F(NeuralStylusPalmDetectionFilterTest, EventDeviceSimpleTest) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, EventDeviceSimpleTest) {
   EventDeviceInfo devinfo;
   std::vector<std::pair<DeviceCapabilities, bool>> devices = {
       {kNocturneTouchScreen, true},
@@ -123,24 +135,26 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, EventDeviceSimpleTest) {
   }
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterDeathTest, EventDeviceConstructionDeath) {
+TEST(NeuralStylusPalmDetectionFilterDeathTest, EventDeviceConstructionDeath) {
   EventDeviceInfo bad_devinfo;
   EXPECT_TRUE(CapabilitiesToDeviceInfo(kNocturneStylus, &bad_devinfo));
+  std::unique_ptr<NeuralStylusPalmDetectionFilterModel> model_(
+      new testing::StrictMock<MockNeuralModel>);
+  std::unique_ptr<SharedPalmDetectionFilterState> shared_palm_state =
+      std::make_unique<SharedPalmDetectionFilterState>();
   EXPECT_DCHECK_DEATH({
-    NeuralStylusPalmDetectionFilter f(
-        bad_devinfo,
-        std::unique_ptr<NeuralStylusPalmDetectionFilterModel>(model_),
-        shared_palm_state.get());
+    NeuralStylusPalmDetectionFilter f(bad_devinfo, std::move(model_),
+                                      shared_palm_state.get());
   });
 }
 #endif
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, NameTest) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, NameTest) {
   EXPECT_EQ("NeuralStylusPalmDetectionFilter",
             palm_detection_filter_->FilterNameForTesting());
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmAreaTest) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmAreaTest) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled,
       expected_cancelled;
   touch_[0].touching = true;
@@ -167,7 +181,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmAreaTest) {
   EXPECT_EQ(expected_cancelled, actual_cancelled);
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmSizeTest) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmSizeTest) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   touch_[0].touching = true;
   touch_[0].tracking_id = 600;
@@ -185,7 +199,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmSizeTest) {
   touch_[0].was_touching = true;
   touch_[0].touching = false;
   touch_[0].tracking_id = -1;
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   EXPECT_TRUE(actual_held.none());
@@ -203,7 +217,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmSizeTest) {
   touch_[0].was_touching = true;
   touch_[0].touching = false;
   touch_[0].tracking_id = -1;
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   EXPECT_TRUE(actual_held.none());
@@ -212,7 +226,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, ShortTouchPalmSizeTest) {
   EXPECT_TRUE(actual_cancelled.none());
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
   // Set up 3 touches as touching:
   // Touch 0 starts off and is sent twice
   // Touch 1 and 2 are then added on: 2 is far away, 1 is nearby. We expect a
@@ -259,7 +273,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
   touch_[2].tracking_id = 502;
   touch_[2].slot = 2;
 
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   EXPECT_TRUE(actual_held.none());
@@ -284,7 +298,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
               Inference(testing::Pointwise(testing::FloatEq(), features)))
       .Times(1)
       .WillOnce(testing::Return(0.5));
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   EXPECT_TRUE(actual_held.none());
@@ -306,7 +320,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
               Inference(testing::Pointwise(testing::FloatEq(), features)))
       .Times(1)
       .WillOnce(testing::Return(0.5));
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   EXPECT_TRUE(actual_held.none());
@@ -314,7 +328,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTest) {
   EXPECT_EQ(actual_cancelled, expected_cancelled);
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   std::bitset<kNumTouchEvdevSlots> expected_held, expected_cancelled;
 
@@ -369,7 +383,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
               Inference(testing::Pointwise(testing::FloatEq(), features)))
       .Times(1)
       .WillOnce(testing::Return(0.5));
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   // Slot 0 is held.
@@ -425,7 +439,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
       .Times(1)
       .WillOnce(testing::Return(0.5));
 
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
 
@@ -464,7 +478,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
               Inference(testing::Pointwise(testing::FloatEq(), features)))
       .Times(1)
       .WillOnce(testing::Return(0.5));
-  touch_time += base::Milliseconds(8.0f);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
 
@@ -483,7 +497,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, CallFilterTestWithAdaptiveHold) {
   EXPECT_EQ(actual_cancelled, expected_cancelled);
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOnceNotPalm) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, InferenceOnceNotPalm) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   base::TimeTicks touch_time =
       base::TimeTicks::UnixEpoch() + base::Milliseconds(10.0);
@@ -501,7 +515,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOnceNotPalm) {
     if (i != 0) {
       touch_[0].was_touching = true;
     }
-    touch_time += base::Milliseconds(8.0f);
+    touch_time += sample_period_;
     palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                    &actual_cancelled);
     ASSERT_TRUE(actual_held.none()) << " Failed at " << i;
@@ -509,7 +523,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOnceNotPalm) {
   }
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOncePalm) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, InferenceOncePalm) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   std::bitset<kNumTouchEvdevSlots> expected_cancelled;
   base::TimeTicks touch_time =
@@ -533,7 +547,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOncePalm) {
     if (i != 0) {
       touch_[0].was_touching = true;
     }
-    touch_time += base::Milliseconds(8.0f);
+    touch_time += sample_period_;
     palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                    &actual_cancelled);
     ASSERT_EQ(original_finger_time,
@@ -553,7 +567,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, InferenceOncePalm) {
   }
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, DelayShortFingerTouch) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, DelayShortFingerTouch) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   std::bitset<kNumTouchEvdevSlots> expected_held, expected_cancelled;
   model_config_.heuristic_delay_start_if_palm = true;
@@ -573,7 +587,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, DelayShortFingerTouch) {
   EXPECT_EQ(expected_cancelled, actual_cancelled);
 }
 
-TEST_F(NeuralStylusPalmDetectionFilterTest, DelayShortPalmTouch) {
+TEST_P(NeuralStylusPalmDetectionFilterTest, DelayShortPalmTouch) {
   std::bitset<kNumTouchEvdevSlots> actual_held, actual_cancelled;
   std::bitset<kNumTouchEvdevSlots> expected_held, expected_cancelled;
   model_config_.heuristic_delay_start_if_palm = true;
@@ -596,7 +610,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, DelayShortPalmTouch) {
   // Delay continues even afterwards, until inference time: then it's off.
   for (uint32_t i = 1; i < model_config_.max_sample_count - 1; ++i) {
     touch_[0].was_touching = true;
-    touch_time += base::Milliseconds(10.0);
+    touch_time += sample_period_;
     touch_[0].major = 15;
     touch_[0].minor = 15;
     touch_[0].x += 1;
@@ -610,7 +624,7 @@ TEST_F(NeuralStylusPalmDetectionFilterTest, DelayShortPalmTouch) {
   EXPECT_CALL(*model_, Inference(testing::_))
       .Times(1)
       .WillOnce(testing::Return(-0.1));
-  touch_time = base::TimeTicks::UnixEpoch() + base::Milliseconds(10.0);
+  touch_time += sample_period_;
   palm_detection_filter_->Filter(touch_, touch_time, &actual_held,
                                  &actual_cancelled);
   expected_held.set(0, false);
