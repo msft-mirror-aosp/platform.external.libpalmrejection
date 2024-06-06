@@ -78,7 +78,6 @@ cc_test {
         "libchrome",
     ],
     static_libs: [
-        "libc++fs",
         "libgmock",
         "liblog",
         "libpalmrejection",
