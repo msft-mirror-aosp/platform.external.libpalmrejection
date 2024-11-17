@@ -56,9 +56,6 @@ cc_library_static {
     host_supported: true,
     target: {
         host: {
-            include_dirs: [
-                "bionic/libc/kernel/uapi",
-            ],
             cflags: [
                 "-D__ANDROID_HOST__",
             ],
@@ -98,9 +95,6 @@ cc_test {
     host_supported: true,
     target: {
         host: {
-            include_dirs: [
-                "bionic/libc/kernel/uapi",
-            ],
             cflags: [
                 "-D__ANDROID_HOST__",
             ],
